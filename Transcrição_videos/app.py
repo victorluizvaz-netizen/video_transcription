@@ -2,68 +2,48 @@ import streamlit as st
 import whisper
 import tempfile
 import os
-import google.generativeai as genai
+from openai import OpenAI
 
 # --- CONFIGURAÇÕES INICIAIS ---
 st.set_page_config(page_title="Transcritor IA Profissional", layout="wide", page_icon="🎙️")
 
-# Configuração da API do Gemini
-if "GEMINI_API_KEY" in st.secrets:
-    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+# Configuração da API OpenAI
+if "OPENAI_API_KEY" in st.secrets:
+    client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 else:
-    st.error("Configure a variável GEMINI_API_KEY nas Secrets do Streamlit.")
+    st.error("Configure a variável OPENAI_API_KEY nas Secrets do Streamlit.")
 
-# --- FUNÇÕES DE APOIO (USANDO ID COMPLETO DO MODELO) ---
-def gerar_resumo(texto):
-    # Usando o caminho absoluto do modelo para evitar erro 404
-    model = genai.GenerativeModel(model_name='models/gemini-1.5-flash')
-    prompt = f"Com base na seguinte transcrição, crie um resumo executivo com pontos principais (bullet points) e uma conclusão curta:\n\n{texto}"
-    response = model.generate_content(prompt)
-    return response.text
-
-def refinar_texto(texto):
-    # Usando o caminho absoluto do modelo para evitar erro 404
-    model = genai.GenerativeModel(model_name='models/gemini-1.5-flash')
-    prompt = (
-        "Você é um editor profissional. Re-escreva a transcrição a seguir para que fique clara, fluida e profissional. "
-        "Corrija erros de concordância, melhore a pontuação e organize o texto em parágrafos com indentação correta. "
-        "Mantenha o sentido original. Texto:\n\n" + texto
+# --- FUNÇÃO DE PROCESSAMENTO COM CHATGPT ---
+def processar_com_gpt(texto, instrucao):
+    response = client.chat.completions.create(
+        model="gpt-4o-mini", # Modelo rápido e barato
+        messages=[
+            {"role": "system", "content": "Você é um assistente editorial profissional especializado em transcrições."},
+            {"role": "user", "content": f"Instrução: {instrucao}\n\nTexto:\n{texto}"}
+        ]
     )
-    response = model.generate_content(prompt)
-    return response.text
+    return response.choices[0].message.content
 
 # --- INTERFACE ---
-st.title("🎙️ Transcritor & Assistente de Conteúdo")
-st.markdown("Converta vídeos em texto e utilize IA para refinar ou resumir o conteúdo.")
+st.title("🎙️ Transcritor & Editor IA")
+st.markdown("Transcreva vídeos e use o ChatGPT para refinar o conteúdo como desejar.")
 
 # Barra Lateral
 st.sidebar.header("1. Configurações")
 arquivo_video = st.sidebar.file_uploader("Upload do Vídeo", type=["mp4", "mov", "mkv"])
+modelo_ia = st.sidebar.selectbox("Precisão do Whisper", ["base", "small"], index=1)
 
-modelo_ia = st.sidebar.selectbox(
-    "Precisão do Whisper", 
-    ["base", "small"], 
-    index=1,
-    help="O modelo 'medium' é pesado demais para o servidor gratuito do Streamlit."
-)
-
-# Inicialização do Estado da Sessão
+# Estado da Sessão
 if 'transcricao' not in st.session_state:
     st.session_state['transcricao'] = None
-if 'refinado' not in st.session_state:
-    st.session_state['refinado'] = None
-if 'resumo' not in st.session_state:
-    st.session_state['resumo'] = None
+if 'resultado_gpt' not in st.session_state:
+    st.session_state['resultado_gpt'] = None
 
 # --- FLUXO PRINCIPAL ---
 if arquivo_video:
     st.video(arquivo_video)
     
     if st.button("🚀 Iniciar Transcrição"):
-        st.session_state['transcricao'] = None
-        st.session_state['refinado'] = None
-        st.session_state['resumo'] = None
-        
         with st.spinner("Extraindo áudio e transcrevendo..."):
             with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp:
                 tmp.write(arquivo_video.read())
@@ -75,43 +55,43 @@ if arquivo_video:
                 st.session_state['transcricao'] = result["text"]
                 st.success("✅ Transcrição concluída!")
             except Exception as e:
-                st.error(f"Erro no processamento do vídeo: {e}")
+                st.error(f"Erro no Whisper: {e}")
             finally:
                 if os.path.exists(tmp_path):
                     os.remove(tmp_path)
 
     if st.session_state['transcricao']:
         st.markdown("---")
-        tab1, tab2, tab3 = st.tabs(["📝 Transcrição Bruta", "🪄 Refinar Texto", "💡 Resumo IA"])
+        col1, col2 = st.columns(2)
 
-        with tab1:
-            st.text_area("Original:", value=st.session_state['transcricao'], height=350)
-            st.download_button("Baixar Bruto (.txt)", st.session_state['transcricao'], file_name="transcricao_bruta.txt")
+        with col1:
+            st.subheader("📝 Transcrição Original")
+            st.text_area("Bruto:", value=st.session_state['transcricao'], height=400)
+            st.download_button("Baixar Bruto", st.session_state['transcricao'], file_name="bruto.txt")
 
-        with tab2:
-            st.markdown("### ✍️ Refinamento Profissional")
-            if st.button("✨ Melhorar Texto"):
-                with st.spinner("O Gemini está editando seu texto..."):
-                    try:
-                        st.session_state['refinado'] = refinar_texto(st.session_state['transcricao'])
-                    except Exception as e:
-                        st.error(f"Erro na API do Gemini: {e}")
+        with col2:
+            st.subheader("🪄 Refinamento e Comandos")
+            # Campo de solicitações personalizadas
+            instrucao_usuario = st.text_input(
+                "O que deseja fazer com o texto?", 
+                placeholder="Ex: Corrija a gramática e organize em parágrafos..."
+            )
             
-            if st.session_state['refinado']:
-                st.text_area("Texto Refinado:", value=st.session_state['refinado'], height=350)
-                st.download_button("Baixar Refinado (.txt)", st.session_state['refinado'], file_name="texto_refinado.txt")
+            if st.button("Executar Comando IA"):
+                if instrucao_usuario:
+                    with st.spinner("O ChatGPT está processando..."):
+                        try:
+                            st.session_state['resultado_gpt'] = processar_com_gpt(
+                                st.session_state['transcricao'], 
+                                instrucao_usuario
+                            )
+                        except Exception as e:
+                            st.error(f"Erro na OpenAI: {e}")
+                else:
+                    st.warning("Por favor, digite uma instrução.")
 
-        with tab3:
-            st.markdown("### 💡 Resumo dos Pontos Chave")
-            if st.button("📝 Gerar Resumo"):
-                with st.spinner("Analisando transcrição..."):
-                    try:
-                        st.session_state['resumo'] = gerar_resumo(st.session_state['transcricao'])
-                    except Exception as e:
-                        st.error(f"Erro na API do Gemini: {e}")
-            
-            if st.session_state['resumo']:
-                st.markdown(st.session_state['resumo'])
-                st.download_button("Baixar Resumo (.txt)", st.session_state['resumo'], file_name="resumo_executivo.txt")
+            if st.session_state['resultado_gpt']:
+                st.text_area("Resultado IA:", value=st.session_state['resultado_gpt'], height=300)
+                st.download_button("Baixar Resultado", st.session_state['resultado_gpt'], file_name="ia_resultado.txt")
 else:
     st.info("Faça o upload de um vídeo para começar.")
