@@ -30,17 +30,22 @@ modelo_ia = st.sidebar.selectbox("Modelo Whisper (Precisão)", ["base", "small",
 if arquivo_video:
     st.video(arquivo_video)
     
-    if st.button("🚀 Processar Vídeo"):
-        with st.spinner("1. Transcrevendo áudio (isso pode demorar dependendo do tamanho)..."):
-            # Salva temp
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tfile:
-                tfile.write(arquivo_video.read())
-                temp_path = tfile.name
+    # Mude isso no seu app.py
+if st.button("🚀 Processar Vídeo"):
+    with st.spinner("1. Transcrevendo áudio..."):
+        # Cria um nome de arquivo fixo temporário
+        temp_path = "video_temp.mp4"
+        with open(temp_path, "wb") as f:
+            f.write(arquivo_video.getbuffer())
 
-            # Transcrição
-            model = whisper.load_model(modelo_ia)
-            result = model.transcribe(temp_path)
-            texto_transcrito = result["text"]
+        # Carrega o modelo e transcreve
+        model = whisper.load_model(modelo_ia)
+        result = model.transcribe(temp_path)
+        texto_transcrito = result["text"]
+        
+        # Opcional: deletar após o uso
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
             
         st.success("✅ Transcrição Concluída!")
         
@@ -62,4 +67,5 @@ if arquivo_video:
         
         os.remove(temp_path)
 else:
+
     st.info("💡 Faça o upload de um vídeo para começar.")
