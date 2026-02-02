@@ -13,15 +13,17 @@ if "GEMINI_API_KEY" in st.secrets:
 else:
     st.error("Configure a variável GEMINI_API_KEY nas Secrets do Streamlit.")
 
-# --- FUNÇÕES DE APOIO ---
+# --- FUNÇÕES DE APOIO (USANDO ID COMPLETO DO MODELO) ---
 def gerar_resumo(texto):
-    model = genai.GenerativeModel('gemini-1.5-flash-latest')
+    # Usando o caminho absoluto do modelo para evitar erro 404
+    model = genai.GenerativeModel(model_name='models/gemini-1.5-flash')
     prompt = f"Com base na seguinte transcrição, crie um resumo executivo com pontos principais (bullet points) e uma conclusão curta:\n\n{texto}"
     response = model.generate_content(prompt)
     return response.text
 
 def refinar_texto(texto):
-    model = genai.GenerativeModel('gemini-1.5-flash-latest')
+    # Usando o caminho absoluto do modelo para evitar erro 404
+    model = genai.GenerativeModel(model_name='models/gemini-1.5-flash')
     prompt = (
         "Você é um editor profissional. Re-escreva a transcrição a seguir para que fique clara, fluida e profissional. "
         "Corrija erros de concordância, melhore a pontuação e organize o texto em parágrafos com indentação correta. "
