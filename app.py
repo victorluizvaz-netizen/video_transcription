@@ -2,64 +2,55 @@ import streamlit as st
 import whisper
 import tempfile
 import os
-import google.generativeai as genai
+from openai import OpenAI
 
-# Configuração da página
-st.set_page_config(page_title="Transcritor & Resumidor IA", layout="wide", page_icon="🎙️")
+# 1. Teste de Importação
+try:
+    from openai import OpenAI
+    openai_instalação = True
+except ImportError:
+    openai_instalação = False
 
-# Configuração da API do Gemini (Pegando das Secrets do Streamlit)
-if "GEMINI_API_KEY" in st.secrets:
-    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+st.set_page_config(page_title="Editor de Transcrição", layout="wide")
+
+# 2. Teste de Chave
+if "OPENAI_API_KEY" in st.secrets:
+    client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 else:
-    st.error("Por favor, configure a variável GEMINI_API_KEY nas Secrets do Streamlit.")
+    st.error("❌ Chave OPENAI_API_KEY não encontrada nas Secrets!")
+    st.stop()
 
-def gerar_resumo(texto):
-    model = genai.GenerativeModel('gemini-pro')
-    prompt = f"Com base na seguinte transcrição de vídeo, crie um resumo executivo com os pontos principais em bullet points e uma conclusão curta: {texto}"
-    response = model.generate_content(prompt)
-    return response.text
+if not openai_instalação:
+    st.error("❌ A biblioteca OpenAI não foi instalada. Mova o 'requirements.txt' para a raiz do GitHub.")
+    st.stop()
 
-st.title("🎙️ Transcritor Inteligente com Resumo IA")
-st.markdown("---")
+st.title("🎙️ Transcritor Profissional")
 
-# Barra Lateral
-st.sidebar.header("Configurações")
-arquivo_video = st.sidebar.file_uploader("Upload do Vídeo", type=["mp4", "mov", "mkv"])
-modelo_ia = st.sidebar.selectbox("Modelo Whisper (Precisão)", ["base", "small", "medium"])
+# --- Interface Simples ---
+arquivo_video = st.sidebar.file_uploader("Upload", type=["mp4", "mov", "mkv"])
 
 if arquivo_video:
     st.video(arquivo_video)
-    
-    if st.button("🚀 Processar Vídeo"):
-        with st.spinner("1. Transcrevendo áudio (isso pode demorar dependendo do tamanho)..."):
-            # Salva temp
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tfile:
-                tfile.write(arquivo_video.read())
-                temp_path = tfile.name
+    if st.button("🚀 Iniciar Processo"):
+        with st.spinner("Transcrevendo..."):
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp:
+                tmp.write(arquivo_video.read())
+                path = tmp.name
+            
+            try:
+                model = whisper.load_model("base")
+                result = model.transcribe(path)
+                st.session_state['txt'] = result["text"]
+                st.success("Transcrição concluída!")
+            finally:
+                if os.path.exists(path): os.remove(path)
 
-            # Transcrição
-            model = whisper.load_model(modelo_ia)
-            result = model.transcribe(temp_path)
-            texto_transcrito = result["text"]
-            
-        st.success("✅ Transcrição Concluída!")
-        
-        # Abas para organizar o conteúdo
-        tab1, tab2 = st.tabs(["📝 Transcrição Completa", "💡 Resumo IA"])
-        
-        with tab1:
-            st.text_area("Texto na íntegra:", value=texto_transcrito, height=400)
-            st.download_button("Baixar Transcrição", texto_transcrito, file_name="transcricao.txt")
-            
-        with tab2:
-            with st.spinner("Gerando resumo com Gemini..."):
-                try:
-                    resumo = gerar_resumo(texto_transcrito)
-                    st.markdown(resumo)
-                    st.download_button("Baixar Resumo", resumo, file_name="resumo.txt")
-                except Exception as e:
-                    st.error(f"Erro ao gerar resumo: {e}")
-        
-        os.remove(temp_path)
-else:
-    st.info("💡 Faça o upload de um vídeo para começar.")
+    if 'txt' in st.session_state:
+        st.subheader("📝 Texto e Comandos")
+        cmd = st.text_input("O que fazer? (ex: Corrija o texto)")
+        if st.button("Enviar para ChatGPT"):
+            res = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": f"{cmd}\n\nTexto: {st.session_state['txt']}"}]
+            )
+            st.write(res.choices[0].message.content)
