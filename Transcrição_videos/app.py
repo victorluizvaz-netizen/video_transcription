@@ -15,13 +15,13 @@ else:
 
 # --- FUNÇÕES DE APOIO ---
 def gerar_resumo(texto):
-    model = genai.GenerativeModel('gemini-pro')
+    model = genai.GenerativeModel('gemini-1.5-flash')
     prompt = f"Com base na seguinte transcrição, crie um resumo executivo com pontos principais (bullet points) e uma conclusão curta:\n\n{texto}"
     response = model.generate_content(prompt)
     return response.text
 
 def refinar_texto(texto):
-    model = genai.GenerativeModel('gemini-pro')
+    model = genai.GenerativeModel('gemini-1.5-flash')
     prompt = (
         "Você é um editor profissional. Re-escreva a transcrição a seguir para que fique clara, fluida e profissional. "
         "Corrija erros de concordância, melhore a pontuação e organize o texto em parágrafos com indentação correta. "
@@ -102,3 +102,4 @@ if arquivo_video:
 
 else:
     st.info("Arraste um vídeo para a barra lateral para começar.")
+
