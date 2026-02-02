@@ -1,4 +1,0 @@
-streamlit
-openai-whisper
-google-generativeai
-setuptools-rust
