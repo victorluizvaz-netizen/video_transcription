@@ -15,12 +15,14 @@ else:
 
 # --- FUNÇÕES DE APOIO ---
 def gerar_resumo(texto):
+    # Atualizado para gemini-1.5-flash
     model = genai.GenerativeModel('gemini-1.5-flash')
     prompt = f"Com base na seguinte transcrição, crie um resumo executivo com pontos principais (bullet points) e uma conclusão curta:\n\n{texto}"
     response = model.generate_content(prompt)
     return response.text
 
 def refinar_texto(texto):
+    # Atualizado para gemini-1.5-flash
     model = genai.GenerativeModel('gemini-1.5-flash')
     prompt = (
         "Você é um editor profissional. Re-escreva a transcrição a seguir para que fique clara, fluida e profissional. "
@@ -37,9 +39,11 @@ st.markdown("Converta vídeos em texto e utilize IA para refinar ou resumir o co
 # Barra Lateral
 st.sidebar.header("1. Upload")
 arquivo_video = st.sidebar.file_uploader("Escolha um vídeo", type=["mp4", "mov", "mkv"])
-modelo_ia = st.sidebar.selectbox("Precisão do Whisper", ["base", "small", "medium"], index=1)
 
-# Inicialização do Estado da Sessão (Para os dados não sumirem ao clicar em botões)
+# Nota sobre memória: Mantendo base e small para evitar crash no Streamlit Cloud
+modelo_ia = st.sidebar.selectbox("Precisão do Whisper", ["base", "small"], index=1)
+
+# Inicialização do Estado da Sessão
 if 'transcricao' not in st.session_state:
     st.session_state['transcricao'] = None
 if 'refinado' not in st.session_state:
@@ -52,14 +56,16 @@ if arquivo_video:
     st.video(arquivo_video)
     
     if st.button("🚀 Iniciar Transcrição"):
+        # Limpa estados anteriores para novo vídeo
+        st.session_state['refinado'] = None
+        st.session_state['resumo'] = None
+        
         with st.spinner("Processando vídeo... (Aguarde a conclusão)"):
-            # Criar arquivo temporário único para evitar FileNotFoundError
             with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp:
                 tmp.write(arquivo_video.read())
                 tmp_path = tmp.name
 
             try:
-                # Transcrição com Whisper
                 model = whisper.load_model(modelo_ia)
                 result = model.transcribe(tmp_path)
                 st.session_state['transcricao'] = result["text"]
@@ -70,21 +76,22 @@ if arquivo_video:
                 if os.path.exists(tmp_path):
                     os.remove(tmp_path)
 
-    # Exibição dos Resultados (Apenas se houver transcrição)
     if st.session_state['transcricao']:
         st.markdown("---")
         tab1, tab2, tab3 = st.tabs(["📝 Transcrição Bruta", "🪄 Melhorar Texto (IA)", "💡 Resumo Executivo"])
 
         with tab1:
-            st.text_area("Texto original do Whisper:", value=st.session_state['transcricao'], height=300)
+            st.text_area("Texto original:", value=st.session_state['transcricao'], height=300)
             st.download_button("Baixar Bruto (.txt)", st.session_state['transcricao'], file_name="bruto.txt")
 
         with tab2:
             st.markdown("### Refinamento de Texto")
-            st.info("Esta função corrige pontuação, concordância e organiza parágrafos.")
             if st.button("✨ Aplicar Melhorias"):
                 with st.spinner("O Gemini está editando seu texto..."):
-                    st.session_state['refinado'] = refinar_texto(st.session_state['transcricao'])
+                    try:
+                        st.session_state['refinado'] = refinar_texto(st.session_state['transcricao'])
+                    except Exception as e:
+                        st.error(f"Erro ao refinar: {e}")
             
             if st.session_state['refinado']:
                 st.text_area("Texto Refinado:", value=st.session_state['refinado'], height=300)
@@ -94,12 +101,13 @@ if arquivo_video:
             st.markdown("### Resumo Gerado")
             if st.button("📝 Gerar Resumo"):
                 with st.spinner("Analisando conteúdo..."):
-                    st.session_state['resumo'] = gerar_resumo(st.session_state['transcricao'])
+                    try:
+                        st.session_state['resumo'] = gerar_resumo(st.session_state['transcricao'])
+                    except Exception as e:
+                        st.error(f"Erro ao resumir: {e}")
             
             if st.session_state['resumo']:
                 st.markdown(st.session_state['resumo'])
                 st.download_button("Baixar Resumo (.txt)", st.session_state['resumo'], file_name="resumo.txt")
-
 else:
     st.info("Arraste um vídeo para a barra lateral para começar.")
-
